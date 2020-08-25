@@ -1,0 +1,128 @@
+name: Build LibTorch
+
+on: [push, pull_request]
+
+env:
+  SRC_REPOSITORY: https://github.com/pytorch/pytorch.git
+  SRC_BRANCH: nightly
+  BUILD_BINARY: OFF
+  BUILD_PYTHON: OFF
+  BUILD_SHARED_LIBS: OFF
+  BUILD_TEST: OFF
+  BUILD_CAFFE2_OPS: OFF
+  BUILD_CAFFE2_MOBILE: OFF
+  USE_NUMPY: OFF
+  MSVC_Z7_OVERRIDE: OFF
+
+jobs:
+  libtorch:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [Ubuntu, MacOS, Windows]
+        include:
+        - platform: Ubuntu
+          os: ubuntu-latest
+          arch: x64
+        - platform: MacOS
+          os: macos-latest
+          arch: x64
+        - platform: Windows
+          os: windows-latest
+          arch: x64
+    name: ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v1
+    - uses: s-weigand/setup-conda@v1
+      with:
+        python-version: 3.7
+    - name: Setup dependencies
+      shell: bash
+      run: |
+        git clone -q --depth=1 --recursive --branch=$SRC_BRANCH $SRC_REPOSITORY pytorch
+        conda install -y numpy ninja pyyaml mkl mkl-include setuptools cffi cmake typing_extensions future six requests
+    - name: Build
+      shell: bash
+      run: |
+        python ./tools/build_libtorch.py
+      working-directory: ./pytorch
+    - name: Collect artifacts
+      shell: bash
+      run: |
+        mkdir -p dist
+        mv -f pytorch/torch/{include,lib,share} dist
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: LibTorch-${{ matrix.platform }}-${{ matrix.arch }}
+        path: ./dist
+  libtorch-android:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64]
+        include:
+        - arch: arm64
+          android_arch: arm64-v8a          
+    name: Android ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_ABI: ${{ matrix.android_arch }}
+      ANDROID_NDK: "/usr/local/lib/android/sdk/ndk-bundle"
+      ANDROID_API_LEVEL: 23
+      ANDROID_NDK_API_LEVEL: 21
+      BUILD_PYTORCH_MOBILE: 1
+    steps:
+    - uses: actions/checkout@v1
+    - uses: s-weigand/setup-conda@v1
+      with:
+        python-version: 3.7
+    - name: Setup dependencies
+      shell: bash
+      run: |
+        git clone -q --depth=1 --recursive --branch=$SRC_BRANCH $SRC_REPOSITORY pytorch
+        conda install -y numpy ninja pyyaml mkl mkl-include setuptools cffi cmake typing_extensions future six requests
+    - name: Build
+      run: |
+        bash ./scripts/build_android.sh
+      working-directory: ./pytorch
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: LibTorch-Android-${{ matrix.arch }}
+        path: ./pytorch/build_android/install
+  libtorch-ios:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64]
+        include: 
+        - arch: arm64
+          ios_platform: OS
+          ios_arch: arm64
+    name: iOS ${{ matrix.arch }}
+    runs-on: macos-latest
+    env:
+      IOS_PLATFORM: ${{ matrix.ios_platform }}
+      IOS_ARCH: ${{ matrix.ios_arch }}
+      BUILD_PYTORCH_MOBILE: 1
+    steps:
+    - uses: actions/checkout@v1
+    - uses: s-weigand/setup-conda@v1
+      with:
+        python-version: 3.7
+    - name: Setup dependencies
+      shell: bash
+      run: |
+        git clone -q --depth=1 --recursive --branch=$SRC_BRANCH $SRC_REPOSITORY pytorch
+        conda install -y numpy ninja pyyaml mkl mkl-include setuptools cffi cmake typing_extensions future six requests
+    - name: Build
+      run: |
+        bash ./scripts/build_ios.sh
+      working-directory: ./pytorch
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: LibTorch-iOS-${{ matrix.arch }}
+        path: ./pytorch/build_ios/install
